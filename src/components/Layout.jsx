@@ -34,26 +34,26 @@ const Layout = () => {
             <Plus size={24} />
           </div>
         </div>
-        
+
         <nav style={{ flex: 1, marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <NavLink to="/" className={({isActive}) => isActive ? "nav-link active" : "nav-link"} title="대시보드">
+          <NavLink to="/" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"} title="대시보드">
             <LayoutDashboard size={22} />
             <span>대시보드</span>
           </NavLink>
-          <NavLink to="/profile" className={({isActive}) => isActive ? "nav-link active" : "nav-link"} title="학생/학부모 DB">
+          <NavLink to="/profile" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"} title="학생/학부모 DB">
             <Users size={22} />
             <span>학생/학부모 DB</span>
           </NavLink>
-          <NavLink to="/analysis" className={({isActive}) => isActive ? "nav-link active" : "nav-link"} title="시험지 분석 및 추천">
+          <NavLink to="/analysis" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"} title="시험지 분석 및 추천">
             <FileSearch size={22} />
             <span>시험지 분석 및 추천</span>
           </NavLink>
-          <NavLink to="/report" className={({isActive}) => isActive ? "nav-link active" : "nav-link"} title="학부모 보고서 생성">
+          <NavLink to="/report" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"} title="학부모 보고서 생성">
             <FileText size={22} />
             <span>학부모 보고서 생성</span>
           </NavLink>
         </nav>
-        
+
         <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
           <button className="nav-link" title="설정">
             <Settings size={22} />
@@ -72,22 +72,22 @@ const Layout = () => {
               새 분석 시작 +
             </button>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
             <div className="search-bar" style={{ display: 'flex', alignItems: 'center', background: '#F8FAFC', padding: '0.625rem 1rem', borderRadius: '12px', width: '260px', border: '1px solid var(--border)' }}>
               <Search size={16} color="var(--text-muted)" />
-              <input 
-                type="text" 
-                placeholder="학생 이름 검색..." 
+              <input
+                type="text"
+                placeholder="학생 이름 검색..."
                 style={{ background: 'transparent', border: 'none', outline: 'none', marginLeft: '0.5rem', width: '100%', fontSize: '0.875rem' }}
               />
             </div>
-            
+
             <div style={{ position: 'relative' }} ref={notifRef}>
-              <button 
+              <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                style={{ 
-                  position: 'relative', 
+                style={{
+                  position: 'relative',
                   color: isNotifOpen ? 'var(--primary)' : 'var(--text-muted)',
                   padding: '0.5rem',
                   borderRadius: '50%',
@@ -101,12 +101,12 @@ const Layout = () => {
 
               {/* Notification Dropdown */}
               {isNotifOpen && (
-                <div className="card animate-fade-in" style={{ 
-                  position: 'absolute', 
-                  top: '120%', 
-                  right: 0, 
-                  width: '320px', 
-                  padding: '0', 
+                <div className="card animate-fade-in" style={{
+                  position: 'absolute',
+                  top: '120%',
+                  right: 0,
+                  width: '320px',
+                  padding: '0',
                   zIndex: 50,
                   boxShadow: 'var(--shadow-lg)'
                 }}>
@@ -116,15 +116,15 @@ const Layout = () => {
                   </div>
                   <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {mockNotifications.map(notif => (
-                      <div key={notif.id} style={{ 
-                        padding: '1rem', 
-                        borderBottom: '1px solid var(--border)', 
+                      <div key={notif.id} style={{
+                        padding: '1rem',
+                        borderBottom: '1px solid var(--border)',
                         background: notif.read ? 'white' : '#FAFCFF',
                         display: 'flex',
                         gap: '0.75rem',
                         cursor: 'pointer'
                       }} className="hover:bg-gray-50">
-                        <div style={{ 
+                        <div style={{
                           width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
                           background: notif.type === 'analysis' ? 'rgba(55, 114, 255, 0.1)' : notif.type === 'report' ? '#FEF3C7' : '#E2E8F0',
                           color: notif.type === 'analysis' ? 'var(--primary)' : notif.type === 'report' ? '#D97706' : '#64748B',
