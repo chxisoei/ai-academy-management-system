@@ -4,7 +4,9 @@ import { LayoutDashboard, Users, FileSearch, FileText, Settings, Bell, Search, P
 
 const Layout = () => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const notifRef = useRef(null);
+  const profileRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -12,12 +14,15 @@ const Layout = () => {
       if (notifRef.current && !notifRef.current.contains(event.target)) {
         setIsNotifOpen(false);
       }
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setIsProfileOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [notifRef]);
+  }, [notifRef, profileRef]);
 
   const mockNotifications = [
     { id: 1, title: '김민준 학생 시험지 분석 완료', time: '방금 전', type: 'analysis', read: false },
@@ -30,8 +35,12 @@ const Layout = () => {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div style={{ width: '40px', height: '40px', background: 'var(--primary)', color: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Plus size={24} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0px 4px 12px rgba(55, 114, 255, 0.35))' }}>
+              {/* Elegant Cursive m + y connected path */}
+              <path d="M 18,48 L 18,36 C 18,22 36,22 36,36 L 36,45 M 36,36 C 36,18 54,18 54,36 L 54,48 C 54,60 82,60 82,34" stroke="var(--primary)" strokeWidth="9.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M 82,28 L 82,66 C 82,82 52,82 52,70" stroke="var(--primary)" strokeWidth="9.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
         </div>
 
@@ -64,18 +73,16 @@ const Layout = () => {
       {/* Main Content */}
       <main className="main-content">
         <header className="header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--text-main)' }}>
-              에이마스터 AI
+          <div className="header-left">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.03em', fontFamily: "'Outfit', 'Inter', sans-serif" }}>mydemy</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--primary)', background: 'rgba(55, 114, 255, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '6px', letterSpacing: '0.05em' }}>AI</span>
             </div>
-            <button className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.8125rem' }}>
-              새 분석 시작 +
-            </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <div className="search-bar" style={{ display: 'flex', alignItems: 'center', background: '#F8FAFC', padding: '0.625rem 1rem', borderRadius: '12px', width: '260px', border: '1px solid var(--border)' }}>
-              <Search size={16} color="var(--text-muted)" />
+          <div className="header-right">
+            <div className="search-bar-responsive">
+              <Search size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
               <input
                 type="text"
                 placeholder="학생 이름 검색..."
@@ -83,7 +90,7 @@ const Layout = () => {
               />
             </div>
 
-            <div style={{ position: 'relative' }} ref={notifRef}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={notifRef}>
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
                 style={{
@@ -92,7 +99,10 @@ const Layout = () => {
                   padding: '0.5rem',
                   borderRadius: '50%',
                   background: isNotifOpen ? 'rgba(55, 114, 255, 0.1)' : 'transparent',
-                  transition: 'background 0.2s'
+                  transition: 'background 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
               >
                 <Bell size={20} />
@@ -148,8 +158,46 @@ const Layout = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-              <img src="https://ui-avatars.com/api/?name=W&background=3772FF&color=fff&rounded=true" alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+            <div style={{ position: 'relative' }} ref={profileRef}>
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+              >
+                <img src="https://ui-avatars.com/api/?name=M&background=3772FF&color=fff&rounded=true" alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+              </div>
+
+              {/* Profile Dropdown */}
+              {isProfileOpen && (
+                <div className="card animate-fade-in" style={{
+                  position: 'absolute',
+                  top: '120%',
+                  right: 0,
+                  width: '240px',
+                  padding: '1.25rem',
+                  zIndex: 50,
+                  boxShadow: 'var(--shadow-lg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  border: '1px solid var(--border)'
+                }}>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: '700', margin: 0, color: 'var(--text-main)' }}>김태현 원장님</h4>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>마이데미 AI 학원</span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>직책:</span>
+                      <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>원장 / 대표 강사</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>아이디:</span>
+                      <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>mydemy_head</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

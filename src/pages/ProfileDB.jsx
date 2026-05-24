@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Filter, MoreVertical, Loader2, X } from 'lucide-react';
-import { getStudents, addStudent, getClasses } from '../services/api';
+import { getStudents, addStudent, getClasses, updateStudent, deleteStudent } from '../services/api';
 
 const GET_PARENT_STRATEGY = {
   '분석형': {
@@ -42,6 +42,11 @@ const ProfileDB = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   
+  // 드롭다운 및 수정 기능 관련 State 추가
+  const [activeDropdownId, setActiveDropdownId] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState(null);
+  
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -53,6 +58,20 @@ const ProfileDB = () => {
     parentName: '', // 학부모 이름
     parentPhone: '', // 학부모 연락처
     parentRelationship: '모', // 부, 모, 기타 보호자
+    parentType: '격려형',
+    sensitivity: '보통'
+  });
+
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    phone: '',
+    school: '',
+    grade: '중1',
+    goal: '성적향상',
+    classId: '1',
+    parentName: '',
+    parentPhone: '',
+    parentRelationship: '모',
     parentType: '격려형',
     sensitivity: '보통'
   });
@@ -81,6 +100,15 @@ const ProfileDB = () => {
   useEffect(() => {
     fetchStudents();
     fetchClasses();
+
+    // 외부 영역 클릭 시 드롭다운 자동으로 닫기
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.dropdown-container')) {
+        setActiveDropdownId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   const handleSearch = (e) => {
@@ -97,6 +125,81 @@ const ProfileDB = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleOpenEditModal = (student) => {
+    setEditingStudentId(student.id);
+    setEditFormData({
+      name: student.name || '',
+      phone: student.phone || '',
+      school: student.school || '',
+      grade: student.grade || '중1',
+      goal: student.goal || '성적향상',
+      classId: String(student.class_id || student.classes?.id || '1'),
+      parentName: student.parents?.name || '',
+      parentPhone: student.parents?.phone || '',
+      parentRelationship: student.parents?.relationship || '모',
+      parentType: student.parents?.type || '격려형',
+      sensitivity: student.parents?.sensitivity || '보통'
+    });
+    setIsEditModalOpen(true);
+    setActiveDropdownId(null); // 드롭다운 닫기
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editFormData.name || !editFormData.school) {
+      alert('이름과 학교를 입력해주세요.');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      await updateStudent(editingStudentId, {
+        name: editFormData.name,
+        phone: editFormData.phone || null,
+        school: editFormData.school,
+        grade: editFormData.grade,
+        goal: editFormData.goal,
+        classId: editFormData.classId,
+        parentName: editFormData.parentName || null,
+        parentPhone: editFormData.parentPhone || null,
+        parentRelationship: editFormData.parentRelationship,
+        parentType: editFormData.parentType,
+        sensitivity: editFormData.sensitivity
+      });
+      setIsEditModalOpen(false);
+      fetchStudents(searchQuery);
+    } catch (error) {
+      console.error('Update failed:', error);
+      alert('수정 중 오류가 발생했습니다: ' + (error.message || JSON.stringify(error)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (student) => {
+    setActiveDropdownId(null);
+    const targetName = student.name;
+    const parentName = student.parents?.name ? ` 및 보호자(${student.parents.name})` : '';
+    
+    if (window.confirm(`정말로 ${targetName} 학생${parentName} 정보를 완전히 삭제하시겠습니까?\n(연관된 학업 분석 기록 데이터도 함께 자동 삭제됩니다.)`)) {
+      setLoading(true);
+      try {
+        await deleteStudent(student.id);
+        fetchStudents(searchQuery);
+      } catch (error) {
+        console.error('Delete failed:', error);
+        alert('삭제 중 오류가 발생했습니다: ' + (error.message || JSON.stringify(error)));
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -136,10 +239,12 @@ const ProfileDB = () => {
         parentType: '격려형',
         sensitivity: '보통'
       });
-      // 목록 새로고침
-      fetchStudents(searchQuery);
+      // 등록 성공 시 검색 조건 비우고 전체 목록 새로고침
+      setSearchQuery('');
+      fetchStudents('');
     } catch (error) {
-      alert('등록 중 오류가 발생했습니다.');
+      console.error('Registration failed:', error);
+      alert('등록 중 오류가 발생했습니다: ' + (error.message || JSON.stringify(error)));
     } finally {
       setSaving(false);
     }
@@ -158,9 +263,9 @@ const ProfileDB = () => {
       </div>
 
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FAFCFF' }}>
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', background: '#FAFCFF' }}>
           
-          <div className="tabs">
+          <div className="tabs" style={{ flexShrink: 0 }}>
             <div 
               className={`tab ${activeTab === 'student' ? 'active' : ''}`}
               onClick={() => setActiveTab('student')}
@@ -175,26 +280,27 @@ const ProfileDB = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexGrow: 1, justifyContent: 'flex-end', minWidth: '240px' }}>
+            <div style={{ position: 'relative', flexGrow: 1, maxWidth: '300px' }}>
               <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }} />
               <input 
                 type="text" 
                 placeholder="이름, 학교 검색" 
                 className="input-field" 
-                style={{ paddingLeft: '2.25rem', width: '240px', background: 'white' }} 
+                style={{ paddingLeft: '2.25rem', width: '100%', background: 'white' }} 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
             </div>
-            <button className="btn btn-secondary" style={{ padding: '0.5rem', background: 'white' }} onClick={handleSearch}>
+            <button className="btn btn-secondary" style={{ padding: '0.5rem', background: 'white', flexShrink: 0 }} onClick={handleSearch}>
               <Filter size={18} />
             </button>
           </div>
         </div>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           {activeTab === 'student' ? (
             <>
               <thead>
@@ -259,7 +365,74 @@ const ProfileDB = () => {
                       </td>
                       <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>{student.lastReport || '-'}</td>
                       <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
-                        <button style={{ color: 'var(--text-muted)', padding: '0.25rem', borderRadius: '4px' }} onMouseOver={e => e.currentTarget.style.background = '#E2E8F0'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}><MoreVertical size={18} /></button>
+                        <div className="dropdown-container" style={{ position: 'relative', display: 'inline-block' }}>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveDropdownId(activeDropdownId === student.id ? null : student.id);
+                            }}
+                            style={{ color: 'var(--text-muted)', padding: '0.25rem', borderRadius: '4px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
+                            onMouseOver={e => e.currentTarget.style.background = '#E2E8F0'} 
+                            onMouseOut={e => e.currentTarget.style.background = activeDropdownId === student.id ? '#E2E8F0' : 'transparent'}
+                          >
+                            <MoreVertical size={18} />
+                          </button>
+                          {activeDropdownId === student.id && (
+                            <div style={{
+                              position: 'absolute',
+                              right: 0,
+                              marginTop: '0.25rem',
+                              width: '120px',
+                              background: 'white',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                              zIndex: 10,
+                              overflow: 'hidden'
+                            }}>
+                              <button 
+                                type="button"
+                                onClick={() => handleOpenEditModal(student)}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.625rem 1rem',
+                                  textAlign: 'left',
+                                  fontSize: '0.8125rem',
+                                  color: 'var(--text)',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.2s',
+                                  fontWeight: 'normal'
+                                }}
+                                onMouseOver={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                정보 수정
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => handleDelete(student)}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.625rem 1rem',
+                                  textAlign: 'left',
+                                  fontSize: '0.8125rem',
+                                  color: '#DC2626',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.2s',
+                                  fontWeight: 'normal'
+                                }}
+                                onMouseOver={e => e.currentTarget.style.background = '#FEF2F2'}
+                                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -353,7 +526,74 @@ const ProfileDB = () => {
                           {student.parents?.phone && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>☎ {student.parents.phone}</div>}
                         </td>
                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
-                          <button style={{ color: 'var(--text-muted)', padding: '0.25rem', borderRadius: '4px' }} onMouseOver={e => e.currentTarget.style.background = '#E2E8F0'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}><MoreVertical size={18} /></button>
+                          <div className="dropdown-container" style={{ position: 'relative', display: 'inline-block' }}>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDropdownId(activeDropdownId === student.id ? null : student.id);
+                              }}
+                              style={{ color: 'var(--text-muted)', padding: '0.25rem', borderRadius: '4px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
+                              onMouseOver={e => e.currentTarget.style.background = '#E2E8F0'} 
+                              onMouseOut={e => e.currentTarget.style.background = activeDropdownId === student.id ? '#E2E8F0' : 'transparent'}
+                            >
+                              <MoreVertical size={18} />
+                            </button>
+                            {activeDropdownId === student.id && (
+                              <div style={{
+                                position: 'absolute',
+                                right: 0,
+                                marginTop: '0.25rem',
+                                width: '120px',
+                                background: 'white',
+                                border: '1px solid var(--border)',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                zIndex: 10,
+                                overflow: 'hidden'
+                              }}>
+                                <button 
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(student)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.625rem 1rem',
+                                    textAlign: 'left',
+                                    fontSize: '0.8125rem',
+                                    color: 'var(--text)',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.2s',
+                                    fontWeight: 'normal'
+                                  }}
+                                  onMouseOver={e => e.currentTarget.style.background = '#F8FAFC'}
+                                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  정보 수정
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => handleDelete(student)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.625rem 1rem',
+                                    textAlign: 'left',
+                                    fontSize: '0.8125rem',
+                                    color: '#DC2626',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.2s',
+                                    fontWeight: 'normal'
+                                  }}
+                                  onMouseOver={e => e.currentTarget.style.background = '#FEF2F2'}
+                                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -368,9 +608,10 @@ const ProfileDB = () => {
               </tbody>
             </>
           )}
-        </table>
+          </table>
+        </div>
         
-        <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.875rem', background: '#FAFCFF' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', background: '#FAFCFF' }}>
           <span>총 {students.length}명의 {activeTab === 'student' ? '학생' : '학부모'}이 검색되었습니다.</span>
           <div style={{ display: 'flex', gap: '0.25rem' }}>
             <button className="btn btn-secondary" style={{ padding: '0.375rem 0.75rem', background: 'white' }}>이전</button>
@@ -383,7 +624,7 @@ const ProfileDB = () => {
       {/* Registration Modal */}
       {isModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
-          <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '500px', padding: '2rem' }}>
+          <div className="card animate-fade-in responsive-modal-content" style={{ width: '100%', maxWidth: '500px', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: '700' }}>신규 학생 등록</h2>
               <button onClick={() => setIsModalOpen(false)} style={{ color: 'var(--text-muted)' }}><X size={20} /></button>
@@ -487,6 +728,120 @@ const ProfileDB = () => {
                 <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>취소</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? <Loader2 size={18} className="animate-spin" /> : '등록하기'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
+          <div className="card animate-fade-in responsive-modal-content" style={{ width: '100%', maxWidth: '500px', padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '700' }}>인물 정보 수정</h2>
+              <button onClick={() => setIsEditModalOpen(false)} style={{ color: 'var(--text-muted)' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              {/* 학생 정보 1: 이름 / 연락처 */}
+              <div className="grid grid-cols-2 gap-4" style={{ marginBottom: '1rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">이름 <span style={{ color: 'var(--error)' }}>*</span></label>
+                  <input type="text" name="name" className="input-field" value={editFormData.name} onChange={handleEditInputChange} required placeholder="홍길동" />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학생 연락처</label>
+                  <input type="text" name="phone" className="input-field" value={editFormData.phone || ''} onChange={handleEditInputChange} placeholder="010-0000-0000" />
+                </div>
+              </div>
+
+              {/* 학생 정보 2: 학교 / 학년 / 소속 반 */}
+              <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '1rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학교 <span style={{ color: 'var(--error)' }}>*</span></label>
+                  <input type="text" name="school" className="input-field" value={editFormData.school} onChange={handleEditInputChange} required placeholder="강남중" style={{ fontSize: '0.8125rem' }} />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학년</label>
+                  <select name="grade" className="input-field" value={editFormData.grade} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    <option value="초6">초6</option>
+                    <option value="중1">중1</option>
+                    <option value="중2">중2</option>
+                    <option value="중3">중3</option>
+                    <option value="고1">고1</option>
+                    <option value="고2">고2</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">소속 반</label>
+                  <select name="classId" className="input-field" value={editFormData.classId} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 학부모 정보 경계선 */}
+              <div style={{ borderTop: '1px dashed var(--border)', margin: '1.25rem 0' }}></div>
+              <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>학부모 정보 (선택)</div>
+
+              {/* 학부모 정보 1: 보호자 구분 / 학부모 이름 / 학부모 연락처 */}
+              <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '1rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">보호자 구분</label>
+                  <select name="parentRelationship" className="input-field" value={editFormData.parentRelationship} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    <option value="모">모 (어머니)</option>
+                    <option value="부">부 (아버지)</option>
+                    <option value="기타 보호자">기타 보호자</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학부모 이름</label>
+                  <input type="text" name="parentName" className="input-field" value={editFormData.parentName || ''} onChange={handleEditInputChange} placeholder="한지민" style={{ fontSize: '0.8125rem' }} />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학부모 연락처</label>
+                  <input type="text" name="parentPhone" className="input-field" value={editFormData.parentPhone || ''} onChange={handleEditInputChange} placeholder="010-0000-0000" style={{ fontSize: '0.8125rem' }} />
+                </div>
+              </div>
+
+              {/* 학부모 정보 2: 학습 목표 / 학부모 성향 / 보고서 민감도 */}
+              <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '2rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학습 목표</label>
+                  <select name="goal" className="input-field" value={editFormData.goal} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    <option value="성적향상">성적향상</option>
+                    <option value="흥미유발">흥미유발</option>
+                    <option value="선행진도">선행진도</option>
+                    <option value="개념보완">개념보완</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">학부모 성향</label>
+                  <select name="parentType" className="input-field" value={editFormData.parentType} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    <option value="분석형">분석형</option>
+                    <option value="격려형">격려형</option>
+                    <option value="결과중심형">결과중심형</option>
+                    <option value="참여형">참여형</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">보고서 민감도</label>
+                  <select name="sensitivity" className="input-field" value={editFormData.sensitivity} onChange={handleEditInputChange} style={{ fontSize: '0.8125rem' }}>
+                    <option value="높음">높음</option>
+                    <option value="보통">보통</option>
+                    <option value="낮음">낮음</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsEditModalOpen(false)}>취소</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? <Loader2 size={18} className="animate-spin" /> : '저장하기'}
                 </button>
               </div>
             </form>

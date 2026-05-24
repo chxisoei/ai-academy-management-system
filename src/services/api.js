@@ -137,10 +137,22 @@ export const getStudents = async (searchQuery = '') => {
 export const addStudent = async (studentData) => {
   if (hasSupabaseConfig) {
     try {
-      // 1. Insert parent first
+      // 1. Get max parent id to bypass sequence mismatch (Supabase identity desync)
+      let nextParentId = undefined;
+      const { data: maxParentData } = await supabase
+        .from('parents')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1);
+      if (maxParentData && maxParentData.length > 0) {
+        nextParentId = maxParentData[0].id + 1;
+      }
+
+      // Insert parent first referencing manual id if calculated
       const { data: parentData, error: parentError } = await supabase
         .from('parents')
         .insert([{
+          ...(nextParentId ? { id: nextParentId } : {}),
           name: studentData.parentName || null,
           phone: studentData.parentPhone || null,
           relationship: studentData.parentRelationship || '모',
@@ -155,10 +167,22 @@ export const addStudent = async (studentData) => {
         throw parentError;
       }
 
-      // 2. Insert student referencing parent_id and class_id
+      // 2. Get max student id to bypass sequence mismatch
+      let nextStudentId = undefined;
+      const { data: maxStudentData } = await supabase
+        .from('students')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1);
+      if (maxStudentData && maxStudentData.length > 0) {
+        nextStudentId = maxStudentData[0].id + 1;
+      }
+
+      // Insert student referencing manual id and parent_id
       const { data: studentRecords, error: studentError } = await supabase
         .from('students')
         .insert([{
+          ...(nextStudentId ? { id: nextStudentId } : {}),
           name: studentData.name,
           phone: studentData.phone || null,
           school: studentData.school,
@@ -177,7 +201,7 @@ export const addStudent = async (studentData) => {
       
       // Fetch class relation
       let classRecord = null;
-      if (studentRecords[0].class_id) {
+      if (studentRecords && studentRecords.length > 0 && studentRecords[0].class_id) {
         const { data: clsData } = await supabase
           .from('classes')
           .select('*')
@@ -192,8 +216,8 @@ export const addStudent = async (studentData) => {
         classes: classRecord
       };
     } catch (e) {
-      console.warn('Supabase insert student failed, falling back to mock:', e);
-      return addMockStudentData(studentData);
+      console.error('Supabase insert student failed:', e);
+      throw e;
     }
   }
   return addMockStudentData(studentData);
@@ -207,7 +231,11 @@ export const getRecentAnalyses = async () => {
         console.warn('Error fetching analyses from Supabase, falling back to mock:', error);
         return MOCK_ANALYSES;
       }
-      return data;
+      return data.map(item => ({
+        ...item,
+        name: item.students?.name || '학생',
+        school: item.school || item.students?.school || '학교미상'
+      }));
     } catch (e) {
       console.warn('Supabase analyses request failed, falling back to mock:', e);
       return MOCK_ANALYSES;
@@ -215,6 +243,53 @@ export const getRecentAnalyses = async () => {
   }
   await delay(500);
   return MOCK_ANALYSES;
+};
+
+export const addAnalysis = async (analysisData) => {
+  if (hasSupabaseConfig) {
+    try {
+      const { data, error } = await supabase
+        .from('analyses')
+        .insert([{
+          student_id: Number(analysisData.student_id),
+          school: analysisData.school,
+          test: analysisData.test,
+          date: analysisData.date || new Date().toISOString().split('T')[0],
+          score: Number(analysisData.score),
+          weakness: analysisData.weakness
+        }])
+        .select();
+        
+      if (error) {
+        console.error('Error inserting analysis into Supabase:', error);
+        throw error;
+      }
+      return data[0];
+    } catch (e) {
+      console.error('Supabase insert analysis failed:', e);
+      throw e;
+    }
+  }
+  // Mock Fallback
+  await delay(300);
+  const newAnalysis = {
+    id: Date.now(),
+    student_id: Number(analysisData.student_id),
+    name: '학생',
+    school: analysisData.school,
+    test: analysisData.test,
+    date: analysisData.date || new Date().toISOString().split('T')[0],
+    score: Number(analysisData.score),
+    weakness: analysisData.weakness
+  };
+  
+  const mockStudent = MOCK_STUDENTS.find(s => String(s.id) === String(analysisData.student_id));
+  if (mockStudent) {
+    newAnalysis.name = mockStudent.name;
+  }
+  
+  MOCK_ANALYSES.unshift(newAnalysis);
+  return newAnalysis;
 };
 
 export const getStudentById = async (id) => {
@@ -233,3 +308,182 @@ export const getStudentById = async (id) => {
   }
   return getMockStudentById(id);
 };
+
+// 학생 & 학부모 수정 API
+export const updateStudent = async (id, studentData) => {
+  if (hasSupabaseConfig) {
+    try {
+      // 1. 수정할 학생의 parent_id를 먼저 확보
+      const { data: currentStudent, error: fetchError } = await supabase
+        .from('students')
+        .select('parent_id')
+        .eq('id', id)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      const parentId = currentStudent?.parent_id;
+
+      // 2. 학부모 정보 업데이트 (parent_id가 있을 경우에만)
+      let parentData = null;
+      if (parentId) {
+        const { data: updatedParent, error: parentError } = await supabase
+          .from('parents')
+          .update({
+            name: studentData.parentName || null,
+            phone: studentData.parentPhone || null,
+            relationship: studentData.parentRelationship || '모',
+            type: studentData.parentType,
+            sensitivity: studentData.sensitivity
+          })
+          .eq('id', parentId)
+          .select()
+          .single();
+          
+        if (parentError) throw parentError;
+        parentData = updatedParent;
+      }
+
+      // 3. 학생 정보 업데이트
+      const { data: updatedStudents, error: studentError } = await supabase
+        .from('students')
+        .update({
+          name: studentData.name,
+          phone: studentData.phone || null,
+          school: studentData.school,
+          grade: studentData.grade,
+          goal: studentData.goal,
+          class_id: Number(studentData.classId) || null
+        })
+        .eq('id', id)
+        .select();
+        
+      if (studentError) throw studentError;
+      
+      // 4. 반 정보 매핑 조회
+      let classRecord = null;
+      if (updatedStudents && updatedStudents.length > 0 && updatedStudents[0].class_id) {
+        const { data: clsData } = await supabase
+          .from('classes')
+          .select('*')
+          .eq('id', updatedStudents[0].class_id)
+          .single();
+        classRecord = clsData;
+      }
+
+      return {
+        ...updatedStudents[0],
+        parents: parentData,
+        classes: classRecord
+      };
+    } catch (e) {
+      console.error('Supabase update student failed:', e);
+      throw e;
+    }
+  }
+
+  // --- Mock Fallback ---
+  await delay(400);
+  const studentIndex = MOCK_STUDENTS.findIndex(s => String(s.id) === String(id));
+  if (studentIndex === -1) throw new Error('Student not found in mock');
+
+  const student = MOCK_STUDENTS[studentIndex];
+  
+  // Mock Parent 업데이트
+  let updatedParent = null;
+  if (student.parent_id) {
+    const parentIndex = MOCK_PARENTS.findIndex(p => p.id === student.parent_id);
+    if (parentIndex !== -1) {
+      MOCK_PARENTS[parentIndex] = {
+        ...MOCK_PARENTS[parentIndex],
+        name: studentData.parentName || null,
+        phone: studentData.parentPhone || null,
+        relationship: studentData.parentRelationship || '모',
+        type: studentData.parentType,
+        sensitivity: studentData.sensitivity
+      };
+      updatedParent = MOCK_PARENTS[parentIndex];
+    }
+  }
+
+  // Mock Student 업데이트
+  MOCK_STUDENTS[studentIndex] = {
+    ...student,
+    name: studentData.name,
+    phone: studentData.phone || null,
+    school: studentData.school,
+    grade: studentData.grade,
+    goal: studentData.goal,
+    class_id: Number(studentData.classId) || 1
+  };
+
+  const cls = MOCK_CLASSES.find(c => c.id === MOCK_STUDENTS[studentIndex].class_id) || null;
+  return {
+    ...MOCK_STUDENTS[studentIndex],
+    parents: updatedParent,
+    classes: cls
+  };
+};
+
+// 학생 & 학부모 삭제 API
+export const deleteStudent = async (id) => {
+  if (hasSupabaseConfig) {
+    try {
+      // 1. 삭제할 학생의 parent_id를 먼저 확보
+      const { data: currentStudent, error: fetchError } = await supabase
+        .from('students')
+        .select('parent_id')
+        .eq('id', id)
+        .single();
+        
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116: No rows returned
+        throw fetchError;
+      }
+      
+      const parentId = currentStudent?.parent_id;
+
+      // 2. 학생 레코드 삭제 (analyses는 CASCADE 옵션으로 스키마 상 자동 삭제됨)
+      const { error: studentDeleteError } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', id);
+        
+      if (studentDeleteError) throw studentDeleteError;
+
+      // 3. 학부모 레코드 삭제 (데이터 고립 방지를 위해 함께 삭제)
+      if (parentId) {
+        const { error: parentDeleteError } = await supabase
+          .from('parents')
+          .delete()
+          .eq('id', parentId);
+          
+        if (parentDeleteError) {
+          console.warn('Parent record deletion failed, but student was deleted:', parentDeleteError);
+        }
+      }
+
+      return { success: true };
+    } catch (e) {
+      console.error('Supabase delete student failed:', e);
+      throw e;
+    }
+  }
+
+  // --- Mock Fallback ---
+  await delay(400);
+  const studentIndex = MOCK_STUDENTS.findIndex(s => String(s.id) === String(id));
+  if (studentIndex === -1) throw new Error('Student not found in mock');
+
+  const student = MOCK_STUDENTS[studentIndex];
+
+  // Mock Parent 삭제
+  if (student.parent_id) {
+    MOCK_PARENTS = MOCK_PARENTS.filter(p => p.id !== student.parent_id);
+  }
+
+  // Mock Student 삭제
+  MOCK_STUDENTS = MOCK_STUDENTS.filter(s => String(s.id) !== String(id));
+
+  return { success: true };
+};
+
